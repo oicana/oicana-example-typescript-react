@@ -15,8 +15,8 @@
     "@emotion/react": "11.13.3",
     "@emotion/styled": "11.13.0",
     "@mui/material": "6.1.6",
-    "@oicana/browser": "0.1.0-alpha.5",
-    "@oicana/browser-wasm": "0.1.0-alpha.5",
+    "@oicana/browser": "0.1.0-alpha.6",
+    "@oicana/browser-wasm": "0.1.0-alpha.6",
     "react": "18.2.0",
     "react-dom": "18.2.0"
   },
@@ -32,7 +32,7 @@
     "eslint-plugin-react": "7.34.1",
     "eslint-plugin-react-hooks": "4.6.0",
     "eslint-plugin-react-refresh": "0.4.6",
-    "typescript": "5.2.2",
+    "typescript": "5.9.3",
     "vite": "5.2.8",
     "vite-plugin-compression2": "2.2.1"
   }
