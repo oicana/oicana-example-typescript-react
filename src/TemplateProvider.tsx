@@ -92,7 +92,7 @@ export enum ExportFormat {
     Png,
 }
 
-const downloadPdf = (data: ArrayBuffer, fileName: string) => {
+const downloadPdf = (data: ArrayBuffer | Uint8Array<ArrayBuffer>, fileName: string) => {
     const blob = new Blob([data], {
         type: 'application/pdf',
     });

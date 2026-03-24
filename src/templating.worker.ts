@@ -53,7 +53,7 @@ export type TemplatingWorkerResponse =
       }
     | {
           kind: TemplatingWorkerResponseKind.Preview | TemplatingWorkerResponseKind.Compile;
-          data: ArrayBuffer;
+          data: Uint8Array<ArrayBuffer>;
           templateId: string;
       }
     | {
