@@ -19,6 +19,7 @@ export const LoadingScreen: FC<PropsWithChildren> = ({ children }) => {
         index.set('minimal', 'minimal-0.1.0.zip');
         index.set('table', 'table-0.1.0.zip');
         index.set('multi_input', 'multi_input-0.1.0.zip');
+        index.set('accessibility', 'accessibility-0.1.0.zip');
         return index;
     }, []);
 
