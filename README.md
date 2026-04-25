@@ -18,8 +18,9 @@ Requires Node >= 22.15
 
 The code of this example project is licensed under the [MIT license](LICENSE).
 
-Please be aware that the dependencies `@oicana/browser` and `@oicana/browser-wasm` [are licensed under PolyForm Noncommercial License 1.0.0][oicana-license].
+But please be aware, that the Oicana dependencies [are licensed under PolyForm Noncommercial License 1.0.0][oicana-license] and requires a commercial license for use cases that are not covered by the PolyForm license. Visit [the Oicana website][oicana-website] for pricing options.
 
 
-[oicana-browser]: https://www.npmjs.com/package/@oicana/browser
 [oicana-license]: https://github.com/oicana/oicana?tab=readme-ov-file#licensing
+[oicana-website]: https://oicana.com
+[oicana-browser]: https://www.npmjs.com/package/@oicana/browser
