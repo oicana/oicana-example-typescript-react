@@ -16,17 +16,21 @@ import {
     TemplatingWorkerResponse,
     TemplatingWorkerResponseKind,
 } from './templating.worker.ts';
-import { BlobInputDefinition, BlobWithMetadata, Inputs, JsonInputDefinition } from '@oicana/browser';
+import { BlobInputDefinition, BlobWithMetadata, Inputs, JsonInputDefinition, PageSize } from '@oicana/browser';
 import { useTemplates } from './LoadingContext.tsx';
 
 interface TemplateState {
-    compile: (format: ExportFormat) => void;
+    compilePreview: () => void;
+    exportPdf: () => void;
     timings: number[];
-    image?: string;
-    setPixelsPerPt: Dispatch<SetStateAction<number>>;
+    pages: PageSize[];
+    documentToken: number;
+    pageImages: Map<number, string>;
+    requestPage: (pageIndex: number, pixelsPerPt: number) => void;
+    zoom: number;
+    setZoom: Dispatch<SetStateAction<number>>;
     setTemplateId: Dispatch<SetStateAction<string>>;
     templateId?: string;
-    pixelsPerPt: number;
     updateBlobInputs: (key: string, value: BlobWithMetadata) => void;
     updateJsonInputs: (key: string, value: string) => void;
     inputs?: Inputs;
@@ -39,58 +43,26 @@ interface TemplateState {
 export type WorkerState = 'ready' | 'error' | 'initializing';
 
 export const useTemplate = () => {
-    const {
-        compile,
-        timings,
-        image,
-        setPixelsPerPt,
-        pixelsPerPt,
-        updateBlobInputs,
-        updateJsonInputs,
-        inputs,
-        setTemplateId,
-        templateId,
-        defaultJsonDatasets,
-        workerState,
-        error,
-        clearError,
-    } = useContext(TemplateContext);
-
-    return {
-        compile,
-        timings,
-        image,
-        setPixelsPerPt,
-        pixelsPerPt,
-        updateBlobInputs,
-        updateJsonInputs,
-        inputs,
-        setTemplateId,
-        templateId,
-        defaultJsonDatasets,
-        workerState,
-        error,
-        clearError,
-    };
+    return useContext(TemplateContext);
 };
 
 const TemplateContext = createContext<TemplateState>({
-    compile: () => {},
+    compilePreview: () => {},
+    exportPdf: () => {},
     timings: [],
-    setPixelsPerPt: () => {},
+    pages: [],
+    documentToken: 0,
+    pageImages: new Map(),
+    requestPage: () => {},
+    zoom: 1,
+    setZoom: () => {},
     setTemplateId: () => {},
-    pixelsPerPt: 1,
     updateJsonInputs: () => {},
     updateBlobInputs: () => {},
     defaultJsonDatasets: new Map(),
     workerState: 'initializing',
     clearError: () => {},
 });
-
-export enum ExportFormat {
-    Pdf,
-    Png,
-}
 
 const downloadPdf = (data: ArrayBuffer | Uint8Array<ArrayBuffer>, fileName: string) => {
     const blob = new Blob([data], {
@@ -118,13 +90,49 @@ export const TemplateProvider: FC<PropsWithChildren> = ({ children }) => {
     const [templateId, setTemplateId] = useState<string>('');
     const [defaultJsonDatasets, setDefaultJsonDatasets] = useState(new Map<string, string>());
 
-    const [pixelsPerPt, setPixelsPerPt] = useState<number>(1);
+    const [zoom, setZoom] = useState<number>(1);
     const [timings, setTimings] = useState<number[]>([]);
-    const [image, setImageUrl] = useState<string>();
     const [error, setError] = useState<string | undefined>(undefined);
+
+    const [pages, setPages] = useState<PageSize[]>([]);
+    const [documentToken, setDocumentToken] = useState<number>(0);
+    const [pageImages, setPageImages] = useState<Map<number, string>>(new Map());
+
+    const tokenRef = useRef<number>(0);
+    const pageImagesRef = useRef<Map<number, string>>(new Map());
+    // pageIndex -> highest pixelsPerPt already requested for the current document.
+    const requestedRef = useRef<Map<number, number>>(new Map());
 
     const clearError = useCallback(() => {
         setError(undefined);
+    }, []);
+
+    const prepareForNewDocument = useCallback((pageCount: number) => {
+        requestedRef.current = new Map();
+        let changed = false;
+        const next = new Map(pageImagesRef.current);
+        for (const [index, url] of next) {
+            if (index >= pageCount) {
+                URL.revokeObjectURL(url);
+                next.delete(index);
+                changed = true;
+            }
+        }
+        if (changed) {
+            pageImagesRef.current = next;
+            setPageImages(next);
+        }
+    }, []);
+
+    const setPageImage = useCallback((pageIndex: number, url: string) => {
+        const previous = pageImagesRef.current.get(pageIndex);
+        if (previous !== undefined) {
+            URL.revokeObjectURL(previous);
+        }
+        const next = new Map(pageImagesRef.current);
+        next.set(pageIndex, url);
+        pageImagesRef.current = next;
+        setPageImages(next);
     }, []);
 
     useEffect(() => {
@@ -141,60 +149,79 @@ export const TemplateProvider: FC<PropsWithChildren> = ({ children }) => {
         });
     }, [templateId, templates]);
 
-    const compile = useCallback(
-        (format: ExportFormat) => {
-            if (!sharedWorkerRef.current || templateId === undefined) {
-                return;
-            }
-            setTimings([Date.now()]);
-            sendMessageToWorker(
-                sharedWorkerRef.current.port,
-                format === ExportFormat.Png
-                    ? {
-                          kind: TemplatingWorkerRequestKind.Preview,
-                          jsonInput: jsonInputs.current,
-                          blobInput: blobInputs.current,
-                          templateId,
-                          templatePath: templates.get(templateId)!,
-                          pixelsPerPt,
-                      }
-                    : {
-                          kind: TemplatingWorkerRequestKind.Compile,
-                          jsonInput: jsonInputs.current,
-                          blobInput: blobInputs.current,
-                          templateId,
-                          templatePath: templates.get(templateId)!,
-                      },
-            );
-        },
-        [templateId, pixelsPerPt, templates],
-    );
+    const compilePreview = useCallback(() => {
+        if (!sharedWorkerRef.current || !templateId) {
+            return;
+        }
+        setTimings([Date.now()]);
+        sendMessageToWorker(sharedWorkerRef.current.port, {
+            kind: TemplatingWorkerRequestKind.Compile,
+            jsonInput: jsonInputs.current,
+            blobInput: blobInputs.current,
+            templateId,
+            templatePath: templates.get(templateId)!,
+        });
+    }, [templateId, templates]);
+
+    const exportPdf = useCallback(() => {
+        if (!sharedWorkerRef.current || !templateId) {
+            return;
+        }
+        setTimings([Date.now()]);
+        sendMessageToWorker(sharedWorkerRef.current.port, {
+            kind: TemplatingWorkerRequestKind.ExportPdf,
+            jsonInput: jsonInputs.current,
+            blobInput: blobInputs.current,
+            templateId,
+            templatePath: templates.get(templateId)!,
+        });
+    }, [templateId, templates]);
+
+    const requestPage = useCallback((pageIndex: number, pixelsPerPt: number) => {
+        if (!sharedWorkerRef.current) {
+            return;
+        }
+        // Skip pages we already rendered at an equal or higher resolution.
+        const requested = requestedRef.current.get(pageIndex);
+        if (requested !== undefined && requested >= pixelsPerPt) {
+            return;
+        }
+        requestedRef.current.set(pageIndex, pixelsPerPt);
+        sendMessageToWorker(sharedWorkerRef.current.port, {
+            kind: TemplatingWorkerRequestKind.RenderPage,
+            token: tokenRef.current,
+            pageIndex,
+            pixelsPerPt,
+        });
+    }, []);
 
     useEffect(() => {
-        compile(ExportFormat.Png);
-    }, [compile]);
+        compilePreview();
+    }, [compilePreview]);
 
     const updateBlobInputs = useCallback(
         (key: string, value: BlobWithMetadata) => {
             blobInputs.current.set(key, value);
-            compile(ExportFormat.Png);
+            compilePreview();
         },
-        [compile],
+        [compilePreview],
     );
 
     const updateJsonInputs = useCallback(
         (key: string, value: string) => {
             jsonInputs.current.set(key, value);
-            compile(ExportFormat.Png);
+            compilePreview();
         },
-        [compile],
+        [compilePreview],
     );
 
     useEffect(() => {
         return () => {
-            if (image !== undefined) URL.revokeObjectURL(image);
+            for (const url of pageImagesRef.current.values()) {
+                URL.revokeObjectURL(url);
+            }
         };
-    }, [image]);
+    }, []);
 
     useEffect(() => {
         if (sharedWorkerRef.current) {
@@ -205,13 +232,26 @@ export const TemplateProvider: FC<PropsWithChildren> = ({ children }) => {
 
         sharedWorker.port.onmessage = (event: MessageEvent<TemplatingWorkerResponse>) => {
             switch (event.data.kind) {
-                case TemplatingWorkerResponseKind.Preview: {
+                case TemplatingWorkerResponseKind.Compiled: {
+                    const { token, pages } = event.data;
                     setTimings((timings) => [timings[0], Date.now()]);
-                    setImageUrl(URL.createObjectURL(new Blob([event.data.data], { type: 'image/png' })));
+                    prepareForNewDocument(pages.length);
+                    tokenRef.current = token;
+                    setDocumentToken(token);
+                    setPages(pages);
                     setError(undefined);
                     break;
                 }
-                case TemplatingWorkerResponseKind.Compile: {
+                case TemplatingWorkerResponseKind.Page: {
+                    const { token, pageIndex, data } = event.data;
+                    // Drop pages that belong to a superseded document.
+                    if (token !== tokenRef.current) {
+                        break;
+                    }
+                    setPageImage(pageIndex, URL.createObjectURL(new Blob([data], { type: 'image/png' })));
+                    break;
+                }
+                case TemplatingWorkerResponseKind.Pdf: {
                     setTimings((timings) => [timings[0], Date.now()]);
                     downloadPdf(event.data.data, `${event.data.templateId}_${Date.now()}.pdf`);
                     setError(undefined);
@@ -276,16 +316,20 @@ export const TemplateProvider: FC<PropsWithChildren> = ({ children }) => {
                 sharedWorkerRef.current = undefined;
             }
         };
-    }, [templates]);
+    }, [templates, prepareForNewDocument, setPageImage]);
 
     return (
         <TemplateContext.Provider
             value={{
-                compile,
+                compilePreview,
+                exportPdf,
                 timings,
-                image,
-                setPixelsPerPt,
-                pixelsPerPt,
+                pages,
+                documentToken,
+                pageImages,
+                requestPage,
+                zoom,
+                setZoom,
                 updateBlobInputs,
                 updateJsonInputs,
                 inputs,

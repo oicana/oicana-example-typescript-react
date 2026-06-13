@@ -2,8 +2,11 @@ import {
     BlobInputDefinition,
     BlobWithMetadata,
     CompilationMode,
+    CompiledDocument,
     initialize,
     JsonInputDefinition,
+    PageRange,
+    PageSize,
     Template,
 } from '@oicana/browser';
 import wasmUrl from '@oicana/browser-wasm/oicana_browser_wasm_bg.wasm?url';
@@ -13,6 +16,9 @@ const templateCache: Map<string, Promise<Template>> = new Map();
 let initState: 'idle' | 'initializing' | 'initialized' | 'error' = 'idle';
 let initPromise: Promise<void> | undefined = undefined;
 let initError: unknown;
+
+let currentDocument: { token: number; doc: CompiledDocument } | undefined;
+let documentToken = 0;
 
 const initializeWasm = async () => {
     switch (initState) {
@@ -40,8 +46,9 @@ const initializeWasm = async () => {
 export enum TemplatingWorkerResponseKind {
     Ready,
     Broken,
-    Preview,
-    Compile,
+    Compiled,
+    Page,
+    Pdf,
     Datasets,
     Source,
     Error,
@@ -52,7 +59,19 @@ export type TemplatingWorkerResponse =
           kind: TemplatingWorkerResponseKind.Broken | TemplatingWorkerResponseKind.Ready;
       }
     | {
-          kind: TemplatingWorkerResponseKind.Preview | TemplatingWorkerResponseKind.Compile;
+          kind: TemplatingWorkerResponseKind.Compiled;
+          token: number;
+          templateId: string;
+          pages: PageSize[];
+      }
+    | {
+          kind: TemplatingWorkerResponseKind.Page;
+          token: number;
+          pageIndex: number;
+          data: Uint8Array<ArrayBuffer>;
+      }
+    | {
+          kind: TemplatingWorkerResponseKind.Pdf;
           data: Uint8Array<ArrayBuffer>;
           templateId: string;
       }
@@ -74,27 +93,26 @@ export type TemplatingWorkerResponse =
       };
 
 export enum TemplatingWorkerRequestKind {
-    Preview,
     Compile,
+    RenderPage,
+    ExportPdf,
     Datasets,
     Source,
 }
 
 export type TemplatingWorkerRequest =
     | {
-          kind: TemplatingWorkerRequestKind.Preview;
+          kind: TemplatingWorkerRequestKind.Compile | TemplatingWorkerRequestKind.ExportPdf;
           jsonInput: Map<string, string>;
           blobInput: Map<string, BlobWithMetadata>;
           templateId: string;
           templatePath: string;
-          pixelsPerPt: number;
       }
     | {
-          kind: TemplatingWorkerRequestKind.Compile;
-          jsonInput: Map<string, string>;
-          blobInput: Map<string, BlobWithMetadata>;
-          templateId: string;
-          templatePath: string;
+          kind: TemplatingWorkerRequestKind.RenderPage;
+          token: number;
+          pageIndex: number;
+          pixelsPerPt: number;
       }
     | {
           kind: TemplatingWorkerRequestKind.Datasets;
@@ -111,8 +129,8 @@ export type TemplatingWorkerRequest =
 
 const postMessage = (port: MessagePort, message: TemplatingWorkerResponse) => {
     switch (message.kind) {
-        case TemplatingWorkerResponseKind.Preview:
-        case TemplatingWorkerResponseKind.Compile: {
+        case TemplatingWorkerResponseKind.Page:
+        case TemplatingWorkerResponseKind.Pdf: {
             const copy = new Uint8Array(message.data);
             port.postMessage({ ...message, data: copy.buffer }, [copy.buffer]);
             break;
@@ -176,28 +194,55 @@ addEventListener('connect', async (event: Event) => {
         }
 
         switch (event.data.kind) {
-            case TemplatingWorkerRequestKind.Preview: {
+            case TemplatingWorkerRequestKind.Compile: {
                 try {
-                    const { templateId, templatePath, pixelsPerPt, jsonInput, blobInput } = event.data;
+                    const { templateId, templatePath, jsonInput, blobInput } = event.data;
                     const template = await getTemplate(templateId, templatePath);
-                    const data = template.compile(
-                        jsonInput,
-                        blobInput,
-                        { format: 'png', pixelsPerPt },
-                        CompilationMode.Development,
-                    );
-                    postMessage(port, { kind: TemplatingWorkerResponseKind.Preview, data, templateId });
+                    const doc = template.compile(jsonInput, blobInput, CompilationMode.Development);
+
+                    currentDocument?.doc.dispose();
+                    const token = ++documentToken;
+                    currentDocument = { token, doc };
+
+                    postMessage(port, {
+                        kind: TemplatingWorkerResponseKind.Compiled,
+                        token,
+                        templateId,
+                        pages: [...doc.pages],
+                    });
                 } catch (e) {
                     handleError(port, event.data.templateId, e);
                 }
                 break;
             }
-            case TemplatingWorkerRequestKind.Compile: {
+            case TemplatingWorkerRequestKind.RenderPage: {
+                const { token, pageIndex, pixelsPerPt } = event.data;
+                // Ignore renders for a document that has been superseded.
+                if (!currentDocument || currentDocument.token !== token) {
+                    break;
+                }
+                try {
+                    const data = currentDocument.doc.exportPng(
+                        pixelsPerPt,
+                        PageRange.single(pageIndex),
+                    ) as Uint8Array<ArrayBuffer>;
+                    postMessage(port, { kind: TemplatingWorkerResponseKind.Page, token, pageIndex, data });
+                } catch (e) {
+                    handleError(port, '', e);
+                }
+                break;
+            }
+            case TemplatingWorkerRequestKind.ExportPdf: {
                 try {
                     const { templateId, templatePath, jsonInput, blobInput } = event.data;
                     const template = await getTemplate(templateId, templatePath);
-                    const data = template.compile(jsonInput, blobInput, { format: 'pdf' }, CompilationMode.Development);
-                    postMessage(port, { kind: TemplatingWorkerResponseKind.Compile, data, templateId });
+                    const data = template.export(
+                        jsonInput,
+                        blobInput,
+                        { format: 'pdf' },
+                        CompilationMode.Development,
+                    ) as Uint8Array<ArrayBuffer>;
+                    postMessage(port, { kind: TemplatingWorkerResponseKind.Pdf, data, templateId });
                 } catch (e) {
                     handleError(port, event.data.templateId, e);
                 }
