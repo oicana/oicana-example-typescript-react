@@ -13,7 +13,7 @@ const OVERSCAN = '400px 0px';
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
 export const DocumentPreview: FC = () => {
-    const { pages, pageImages, requestPage, zoom, documentToken } = useTemplate();
+    const { pages, pageImages, requestPage, zoom, documentToken, error } = useTemplate();
 
     const containerRef = useRef<HTMLDivElement>(null);
     const visibleRef = useRef<Set<number>>(new Set());
@@ -99,9 +99,30 @@ export const DocumentPreview: FC = () => {
                     bgcolor: 'grey.900',
                 }}
             >
-                <Typography variant="body1" color="text.secondary">
-                    Preview will appear here
-                </Typography>
+                {error ? (
+                    <Typography variant="body1" color="text.secondary">
+                        Preview will appear here
+                    </Typography>
+                ) : (
+                    <Box
+                        sx={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            gap: 2,
+                            px: 3,
+                            textAlign: 'center',
+                        }}
+                    >
+                        <CircularProgress size={32} thickness={4} />
+                        <Typography variant="body1" color="text.secondary">
+                            Compiling the document in your browser
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                            The first visit downloads the WASM engine, this can take a few seconds.
+                        </Typography>
+                    </Box>
+                )}
             </Box>
         );
     }

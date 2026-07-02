@@ -4,6 +4,7 @@ import { useTemplate } from './TemplateProvider.tsx';
 import { InputsEditor } from './InputsEditor.tsx';
 import { DocumentPreview } from './DocumentPreview.tsx';
 import {
+    Alert,
     AppBar,
     Box,
     Button,
@@ -11,6 +12,7 @@ import {
     FormControl,
     Grid,
     InputLabel,
+    Link,
     MenuItem,
     Select,
     Stack,
@@ -32,6 +34,7 @@ export const Preview: FC = () => {
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('md'));
     const [drawerOpen, setDrawerOpen] = useState(false);
+    const [noticeOpen, setNoticeOpen] = useState(true);
 
     const hasPages = pages.length > 0;
 
@@ -132,6 +135,22 @@ export const Preview: FC = () => {
                     </Button>
                 </Toolbar>
             </AppBar>
+
+            {noticeOpen && (
+                <Alert severity="info" onClose={() => setNoticeOpen(false)} sx={{ borderRadius: 0, flexShrink: 0 }}>
+                    This is an{' '}
+                    <Link href="https://github.com/oicana/oicana-example-typescript-react" target="_blank">
+                        open source example
+                    </Link>{' '}
+                    of <Link href="https://oicana.com">Oicana</Link>'s browser integration. The document preview and the
+                    exported PDF are generated locally in your browser, no server involved.
+                    <Box component="span" sx={{ display: { xs: 'none', md: 'inline' } }}>
+                        {' '}
+                        The raw JSON inputs are exposed here so you can explore the templates; your own application
+                        would likely fill them from its UI or backend instead.
+                    </Box>
+                </Alert>
+            )}
 
             <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
                 <Grid container sx={{ height: '100%', overflow: 'hidden' }} spacing={0}>
