@@ -149,6 +149,13 @@ export const Preview: FC = () => {
                         The raw JSON inputs are exposed here so you can explore the templates; your own application
                         would likely fill them from its UI or backend instead.
                     </Box>
+                    <br />
+                    <Box component="span" sx={{ display: { xs: 'none', md: 'inline' } }}>
+                      The Oicana documentation teaches{' '}
+                    </Box>
+                    <Link href="https://oicana.com/docs/getting-started/1-setup/" target="_blank">
+                      how to create and use your own templates.
+                    </Link>
                 </Alert>
             )}
 
