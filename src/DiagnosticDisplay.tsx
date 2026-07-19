@@ -1,17 +1,25 @@
 import { Alert, AlertTitle, Box, Collapse, Typography } from '@mui/material';
 import { FC } from 'react';
 
-interface ErrorDisplayProps {
-    error: string;
+export type DiagnosticSeverity = 'error' | 'warning';
+
+interface DiagnosticDisplayProps {
+    severity: DiagnosticSeverity;
+    message: string;
     onClose: () => void;
 }
 
-export const ErrorDisplay: FC<ErrorDisplayProps> = ({ error, onClose }) => {
+const titles: Record<DiagnosticSeverity, string> = {
+    error: 'Compilation Error',
+    warning: 'Compilation Warnings',
+};
+
+export const DiagnosticDisplay: FC<DiagnosticDisplayProps> = ({ severity, message, onClose }) => {
     return (
-        <Collapse in={!!error}>
+        <Collapse in={!!message}>
             <Box sx={{ width: '100%' }}>
                 <Alert
-                    severity="error"
+                    severity={severity}
                     onClose={onClose}
                     sx={{
                         borderRadius: 2,
@@ -33,7 +41,7 @@ export const ErrorDisplay: FC<ErrorDisplayProps> = ({ error, onClose }) => {
                     }}
                 >
                     <AlertTitle sx={{ fontWeight: 'bold', fontSize: '1rem', marginBottom: 1 }}>
-                        Compilation Error
+                        {titles[severity]}
                     </AlertTitle>
                     <Typography
                         component="pre"
@@ -48,7 +56,7 @@ export const ErrorDisplay: FC<ErrorDisplayProps> = ({ error, onClose }) => {
                             maxHeight: '200px',
                         }}
                     >
-                        {error}
+                        {message}
                     </Typography>
                 </Alert>
             </Box>

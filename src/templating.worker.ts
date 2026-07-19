@@ -63,6 +63,7 @@ export type TemplatingWorkerResponse =
           token: number;
           templateId: string;
           pages: PageSize[];
+          warnings?: string;
       }
     | {
           kind: TemplatingWorkerResponseKind.Page;
@@ -74,6 +75,7 @@ export type TemplatingWorkerResponse =
           kind: TemplatingWorkerResponseKind.Pdf;
           data: Uint8Array<ArrayBuffer>;
           templateId: string;
+          warnings?: string;
       }
     | {
           kind: TemplatingWorkerResponseKind.Datasets;
@@ -209,6 +211,7 @@ addEventListener('connect', async (event: Event) => {
                         token,
                         templateId,
                         pages: [...doc.pages],
+                        warnings: doc.warnings,
                     });
                 } catch (e) {
                     handleError(port, event.data.templateId, e);
@@ -242,7 +245,12 @@ addEventListener('connect', async (event: Event) => {
                         { format: 'pdf' },
                         CompilationMode.Development,
                     ) as Uint8Array<ArrayBuffer>;
-                    postMessage(port, { kind: TemplatingWorkerResponseKind.Pdf, data, templateId });
+                    postMessage(port, {
+                        kind: TemplatingWorkerResponseKind.Pdf,
+                        data,
+                        templateId,
+                        warnings: template.warnings(),
+                    });
                 } catch (e) {
                     handleError(port, event.data.templateId, e);
                 }

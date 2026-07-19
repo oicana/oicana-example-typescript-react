@@ -21,14 +21,15 @@ import {
     useMediaQuery,
     useTheme,
 } from '@mui/material';
-import { ErrorDisplay } from './ErrorDisplay.tsx';
+import { DiagnosticDisplay } from './DiagnosticDisplay.tsx';
 
 const MIN_ZOOM = 0.25;
 const MAX_ZOOM = 5;
 const clampZoom = (zoom: number) => Math.min(Math.max(zoom, MIN_ZOOM), MAX_ZOOM);
 
 export const Preview: FC = () => {
-    const { pages, zoom, setZoom, exportPdf, setTemplateId, templateId, error, clearError } = useTemplate();
+    const { pages, zoom, setZoom, exportPdf, setTemplateId, templateId, error, clearError, warnings, clearWarnings } =
+        useTemplate();
     const templates = useTemplates();
     const templateIds = useMemo(() => Array.from(templates.keys()), [templates]);
     const theme = useTheme();
@@ -37,6 +38,16 @@ export const Preview: FC = () => {
     const [noticeOpen, setNoticeOpen] = useState(true);
 
     const hasPages = pages.length > 0;
+    const hasDiagnostics = !!error || !!warnings;
+
+    const diagnostics = hasDiagnostics && (
+        <Box sx={{ p: 2, borderTop: 1, borderColor: 'divider' }}>
+            <Stack spacing={1}>
+                {error && <DiagnosticDisplay severity="error" message={error} onClose={clearError} />}
+                {warnings && <DiagnosticDisplay severity="warning" message={warnings} onClose={clearWarnings} />}
+            </Stack>
+        </Box>
+    );
 
     useEffect(() => {
         if (templateIds.length > 0) {
@@ -151,10 +162,10 @@ export const Preview: FC = () => {
                     </Box>
                     <br />
                     <Box component="span" sx={{ display: { xs: 'none', md: 'inline' } }}>
-                      The Oicana documentation teaches{' '}
+                        The Oicana documentation teaches{' '}
                     </Box>
                     <Link href="https://oicana.com/docs/getting-started/1-setup/" target="_blank">
-                      how to create and use your own templates.
+                        how to create and use your own templates.
                     </Link>
                 </Alert>
             )}
@@ -194,11 +205,7 @@ export const Preview: FC = () => {
                                         <InputsEditor />
                                     </Stack>
                                 </Box>
-                                {error && (
-                                    <Box sx={{ p: 2, borderTop: 1, borderColor: 'divider' }}>
-                                        <ErrorDisplay error={error} onClose={clearError} />
-                                    </Box>
-                                )}
+                                {diagnostics}
                             </Box>
                         </Grid>
                     )}
@@ -224,7 +231,7 @@ export const Preview: FC = () => {
                         },
                     }}
                 >
-                    <Box sx={{ p: 3, borderBottom: error ? 1 : 0, borderColor: 'divider' }}>
+                    <Box sx={{ p: 3, borderBottom: hasDiagnostics ? 1 : 0, borderColor: 'divider' }}>
                         <Typography variant="h6">Template Inputs</Typography>
                     </Box>
                     <Box sx={{ flex: 1, overflow: 'auto', p: 3 }}>
@@ -232,11 +239,7 @@ export const Preview: FC = () => {
                             <InputsEditor />
                         </Stack>
                     </Box>
-                    {error && (
-                        <Box sx={{ p: 2, borderTop: 1, borderColor: 'divider' }}>
-                            <ErrorDisplay error={error} onClose={clearError} />
-                        </Box>
-                    )}
+                    {diagnostics}
                 </Drawer>
             )}
         </Box>

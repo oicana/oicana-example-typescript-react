@@ -38,6 +38,8 @@ interface TemplateState {
     workerState: WorkerState;
     error?: string;
     clearError: () => void;
+    warnings?: string;
+    clearWarnings: () => void;
 }
 
 export type WorkerState = 'ready' | 'error' | 'initializing';
@@ -62,6 +64,7 @@ const TemplateContext = createContext<TemplateState>({
     defaultJsonDatasets: new Map(),
     workerState: 'initializing',
     clearError: () => {},
+    clearWarnings: () => {},
 });
 
 const downloadPdf = (data: ArrayBuffer | Uint8Array<ArrayBuffer>, fileName: string) => {
@@ -93,6 +96,7 @@ export const TemplateProvider: FC<PropsWithChildren> = ({ children }) => {
     const [zoom, setZoom] = useState<number>(1);
     const [timings, setTimings] = useState<number[]>([]);
     const [error, setError] = useState<string | undefined>(undefined);
+    const [warnings, setWarnings] = useState<string | undefined>(undefined);
 
     const [pages, setPages] = useState<PageSize[]>([]);
     const [documentToken, setDocumentToken] = useState<number>(0);
@@ -105,6 +109,10 @@ export const TemplateProvider: FC<PropsWithChildren> = ({ children }) => {
 
     const clearError = useCallback(() => {
         setError(undefined);
+    }, []);
+
+    const clearWarnings = useCallback(() => {
+        setWarnings(undefined);
     }, []);
 
     const prepareForNewDocument = useCallback((pageCount: number) => {
@@ -233,13 +241,14 @@ export const TemplateProvider: FC<PropsWithChildren> = ({ children }) => {
         sharedWorker.port.onmessage = (event: MessageEvent<TemplatingWorkerResponse>) => {
             switch (event.data.kind) {
                 case TemplatingWorkerResponseKind.Compiled: {
-                    const { token, pages } = event.data;
+                    const { token, pages, warnings } = event.data;
                     setTimings((timings) => [timings[0], Date.now()]);
                     prepareForNewDocument(pages.length);
                     tokenRef.current = token;
                     setDocumentToken(token);
                     setPages(pages);
                     setError(undefined);
+                    setWarnings(warnings);
                     break;
                 }
                 case TemplatingWorkerResponseKind.Page: {
@@ -255,11 +264,13 @@ export const TemplateProvider: FC<PropsWithChildren> = ({ children }) => {
                     setTimings((timings) => [timings[0], Date.now()]);
                     downloadPdf(event.data.data, `${event.data.templateId}_${Date.now()}.pdf`);
                     setError(undefined);
+                    setWarnings(event.data.warnings);
                     break;
                 }
                 case TemplatingWorkerResponseKind.Error: {
                     setTimings((timings) => [timings[0], Date.now()]);
                     setError(event.data.error);
+                    setWarnings(undefined);
                     break;
                 }
                 case TemplatingWorkerResponseKind.Datasets: {
@@ -339,6 +350,8 @@ export const TemplateProvider: FC<PropsWithChildren> = ({ children }) => {
                 workerState,
                 error,
                 clearError,
+                warnings,
+                clearWarnings,
             }}
         >
             {children}
