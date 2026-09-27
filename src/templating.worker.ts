@@ -1,10 +1,9 @@
 import {
-    BlobInputDefinition,
-    BlobWithMetadata,
+    BlobInput,
     CompilationMode,
     CompiledDocument,
     initialize,
-    JsonInputDefinition,
+    InputDefinition,
     PageRange,
     PageSize,
     Template,
@@ -80,7 +79,7 @@ export type TemplatingWorkerResponse =
     | {
           kind: TemplatingWorkerResponseKind.Datasets;
           templateId: string;
-          inputs: (BlobInputDefinition | JsonInputDefinition)[];
+          inputs: InputDefinition[];
       }
     | {
           kind: TemplatingWorkerResponseKind.Source;
@@ -106,7 +105,7 @@ export type TemplatingWorkerRequest =
     | {
           kind: TemplatingWorkerRequestKind.Compile | TemplatingWorkerRequestKind.ExportPdf;
           jsonInput: Map<string, string>;
-          blobInput: Map<string, BlobWithMetadata>;
+          blobInput: Map<string, BlobInput>;
           templateId: string;
           templatePath: string;
       }
@@ -260,7 +259,7 @@ addEventListener('connect', async (event: Event) => {
                 try {
                     const { templateId, templatePath } = event.data;
                     const template = await getTemplate(templateId, templatePath);
-                    const { inputs } = template.inputs();
+                    const { inputs } = template.manifest().oicana;
                     postMessage(port, { kind: TemplatingWorkerResponseKind.Datasets, inputs, templateId });
                 } catch (e) {
                     handleError(port, event.data.templateId, e);

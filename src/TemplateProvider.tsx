@@ -16,8 +16,13 @@ import {
     TemplatingWorkerResponse,
     TemplatingWorkerResponseKind,
 } from './templating.worker.ts';
-import { BlobInputDefinition, BlobWithMetadata, Inputs, JsonInputDefinition, PageSize } from '@oicana/browser';
+import { BlobInput, BlobInputDefinition, JsonInputDefinition, PageSize } from '@oicana/browser';
 import { useTemplates } from './LoadingContext.tsx';
+
+export interface Inputs {
+    json: JsonInputDefinition[];
+    blob: BlobInputDefinition[];
+}
 
 interface TemplateState {
     compilePreview: () => void;
@@ -31,7 +36,7 @@ interface TemplateState {
     setZoom: Dispatch<SetStateAction<number>>;
     setTemplateId: Dispatch<SetStateAction<string>>;
     templateId?: string;
-    updateBlobInputs: (key: string, value: BlobWithMetadata) => void;
+    updateBlobInputs: (key: string, value: BlobInput) => void;
     updateJsonInputs: (key: string, value: string) => void;
     inputs?: Inputs;
     defaultJsonDatasets: Map<string, string>;
@@ -85,7 +90,7 @@ const downloadPdf = (data: ArrayBuffer | Uint8Array<ArrayBuffer>, fileName: stri
 export const TemplateProvider: FC<PropsWithChildren> = ({ children }) => {
     const templates = useTemplates();
     const sharedWorkerRef = useRef<SharedWorker | undefined>(undefined);
-    const blobInputs = useRef<Map<string, BlobWithMetadata>>(new Map<string, BlobWithMetadata>());
+    const blobInputs = useRef<Map<string, BlobInput>>(new Map<string, BlobInput>());
     const jsonInputs = useRef<Map<string, string>>(new Map<string, string>());
 
     const [workerState, setWorkerState] = useState<WorkerState>('initializing');
@@ -208,7 +213,7 @@ export const TemplateProvider: FC<PropsWithChildren> = ({ children }) => {
     }, [compilePreview]);
 
     const updateBlobInputs = useCallback(
-        (key: string, value: BlobWithMetadata) => {
+        (key: string, value: BlobInput) => {
             blobInputs.current.set(key, value);
             compilePreview();
         },
@@ -277,19 +282,19 @@ export const TemplateProvider: FC<PropsWithChildren> = ({ children }) => {
                     const { inputs, templateId } = event.data;
                     const data: Inputs = { json: [], blob: [] };
                     for (const input of inputs) {
-                        const maybeSet = input as unknown as { type: string };
-                        if (maybeSet.type === 'json') {
-                            const jsonSet = input as JsonInputDefinition;
-                            sendMessageToWorker(sharedWorker.port, {
-                                kind: TemplatingWorkerRequestKind.Source,
-                                templateId,
-                                templatePath: templates.get(templateId)!,
-                                key: jsonSet.key,
-                                file: jsonSet.default,
-                            });
-                            data.json.push(jsonSet);
+                        if (input.type === 'json') {
+                            if (input.default !== null) {
+                                sendMessageToWorker(sharedWorker.port, {
+                                    kind: TemplatingWorkerRequestKind.Source,
+                                    templateId,
+                                    templatePath: templates.get(templateId)!,
+                                    key: input.key,
+                                    file: input.default,
+                                });
+                            }
+                            data.json.push(input);
                         } else {
-                            data.blob.push(input as BlobInputDefinition);
+                            data.blob.push(input);
                         }
                     }
                     setInputs(data);

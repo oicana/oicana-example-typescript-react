@@ -24,8 +24,8 @@ export const BlobInput: FC<BlobInputProps> = ({ dataset }) => {
             if (e.target && e.target.result) {
                 const arrayBuffer = e.target.result as ArrayBuffer;
                 const uint8Array = new Uint8Array(arrayBuffer);
-                const meta = fileType !== undefined ? { image_format: fileType } : {};
-                updateBlobInputs(dataset, { bytes: uint8Array, meta });
+                const metadata = fileType !== undefined ? { image_format: fileType } : {};
+                updateBlobInputs(dataset, { data: uint8Array, metadata });
             }
         };
 
